@@ -1,0 +1,2 @@
+xcopy /y "..\dlls"  "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y /e /i "..\data\*"  "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release\data"

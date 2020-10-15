@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 
     QCoreApplication::setOrganizationName("CEECAM");
     QCoreApplication::setApplicationName("CEECAM Toolkit");
-    QCoreApplication::setApplicationVersion(CC_TK_VERSION);
+    QCoreApplication::setApplicationVersion("test");
 
     MainWindow w;
     w.show();

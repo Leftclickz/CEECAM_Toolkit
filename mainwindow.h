@@ -1,7 +1,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#define CC_TK_VERSION "test"
+#define CC_TK_VERSION "f50bd3f173113836cdcdf2486501e3a8905989eb"
 
 
 #include <QMainWindow>
@@ -17,6 +17,9 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+private slots:
+    void on_pushButton_LoadTable_clicked();
 
 private:
     Ui::MainWindow *ui;
