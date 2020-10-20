@@ -18,6 +18,7 @@ SOURCES += \
     mainwindow.cpp
 
 HEADERS += \
+    argumentmap.h \
     include/DatabaseConnection.h \
     include/LogFile.h \
     include/PGSQL_Helpers.h \
