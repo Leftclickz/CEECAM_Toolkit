@@ -4,7 +4,7 @@
 //#include <mstcpip.h>
 
 //libpq
-#include <../submodules/libpqxx/include/pqxx/pqxx>
+#include <pqxx/pqxx>
 #include <mutex>
 
 class DatabaseConnection

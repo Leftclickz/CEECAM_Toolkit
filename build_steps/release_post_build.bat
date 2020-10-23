@@ -1,2 +1,11 @@
-xcopy /y "..\dlls"  "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
 xcopy /y /e /i "..\data\*"  "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release\data"
+
+xcopy /y "..\submodules\vcpkg\packages\abseil_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\c-ares_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\curl_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\libpq_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\libpqxx_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\openssl-windows_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\protobuf_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\re2_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"
+xcopy /y "..\submodules\vcpkg\packages\zlib_x64-windows\bin\*.dll" "..\..\build-CEECAM_Toolkit-Desktop_Qt_5_15_1_MSVC2019_64bit-Release\release"

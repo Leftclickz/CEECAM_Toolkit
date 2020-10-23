@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 #include "argumentmap.h"
+#include "gcsdownloadthread.h"
 
 #include <QFile>
 #include <QDir>
@@ -23,41 +24,60 @@ MainWindow::MainWindow(QWidget *parent)
 {
     ui->setupUi(this);
 
+    setWindowTitle("CEECAM Toolkit");
+
+    //Create our argument map and parse our argument file
     args = new ArgumentMap();
     args->AddDefaultArguments();
 
+    //Load patterns for download use.
     LoadPatterns();
 
-    //TODO: the proxy needs to be initialized before I can actually run this connection. ADD THIS.
-    //parse our general argument list and add them to the map.
+    //Start the connection proxy
+    {
+        QString batchfile = QCoreApplication::applicationDirPath().append("/data/proxy/auto_connect.bat");
+        QFile test(batchfile);
+
+        if (test.exists())
+        {
+            proxyConnector = new QProcess(this);
+            proxyConnector->start("\"" + batchfile + "\"", QStringList());
+
+            proxySet = true;
+        }
+    }
+
     //Get the connection info from file
-//    {
-//        //We only want a specific file so we'll filter out all other results.
-//        QStringList filters;
-//        filters << "connection.txt";
+    if (proxySet)
+    {
+        //We only want a specific file so we'll filter out all other results.
+        QStringList filters;
+        filters << "connection.txt";
 
-//        //This is our data folder relative to the exe.
-//        QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data"));
-//        assetsFolder.setNameFilters(filters);
-//        assetsFolder.setFilter(QDir::Files);
+        //This is our data folder relative to the exe.
+        QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data/connection"));
+        assetsFolder.setNameFilters(filters);
+        assetsFolder.setFilter(QDir::Files);
 
-//        QFileInfoList files = assetsFolder.entryInfoList();
-//        std::string connInfo = "";
+        QFileInfoList files = assetsFolder.entryInfoList();
+        std::string connInfo = "";
 
-//        //This should only ever run once but just in case.
-//        foreach (QFileInfo file, files)
-//        {
-//            QFile f(file.absoluteFilePath());
-//            if (!f.open(QFile::ReadOnly | QFile::Text)) continue;
+        //This should only ever run once but just in case.
+        foreach (QFileInfo file, files)
+        {
+            QFile f(file.absoluteFilePath());
+            if (!f.open(QFile::ReadOnly | QFile::Text)) continue;
 
-//            QTextStream in(&f);
-//            connInfo = in.readAll().toStdString();
-//            break;
-//        }
+            QTextStream in(&f);
+            connInfo = in.readAll().toStdString();
+            break;
+        }
 
-//        if (connInfo != "")
-//            PGSQL::Connect(connInfo, CEEPLAYER_DB);
-//    }
+        if (connInfo != "")
+            PGSQL::Connect(connInfo, CEEPLAYER_DB);
+
+        conSet = true;
+    }
 
     //Set up the GCS connection from json file.
     {
@@ -66,7 +86,7 @@ MainWindow::MainWindow(QWidget *parent)
         filters << "*.json";
 
         //This is our data folder relative to the exe. It contains the json file.
-        QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data"));
+        QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data/connection"));
         assetsFolder.setNameFilters(filters);
         assetsFolder.setFilter(QDir::Files);
 
@@ -87,12 +107,10 @@ MainWindow::MainWindow(QWidget *parent)
             namespace gcs = google::cloud::storage;
             clientHandle = gcs::Client::CreateDefaultClient();
 
-            //AttemptGCSDownload("images/1/1", "D:/Work/test");
-
             if (!clientHandle) {
                 gacSet = false;
                 return;
-              }          
+            }
         }
     }
 }
@@ -107,26 +125,32 @@ void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
 {
     if (!gacSet) return;
 
-    auto list = clientHandle->ListObjects("ceeplayer", gcs::Prefix(InputDir.toStdString()));
+    //Ensure the base output dir exists and make it if possible.
+    if (!QDir(OutputDir).exists())
+    {
+        if (!QDir().mkdir(OutputDir))
+        {
+            AddToDisplayLog(QString("Output directory does not exist and failed to be created. Argument: %1").arg(OutputDir));
+            return;
+        }
 
-    time_t start_time_timestamp = args->GetAsTime("start_time", "%H:%M:%S");
-    time_t end_time_timestamp = args->GetAsTime("end_time", "%H:%M:%S");
-    time_t start_date_timestamp = args->GetAsTime("start_date", "%y/%m/%d");
-    time_t end_date_timestamp = args->GetAsTime("end_date", "%y/%m/%d");
+        AddToDisplayLog(QString("Output directory created. Argument: %1").arg(OutputDir));
+    }
+
+    time_t start_time_timestamp = args->GetAsTime("start_time");
+    time_t end_time_timestamp = args->GetAsTime("end_time");
+    time_t start_date_timestamp = args->GetAsDate("start_date");
+    time_t end_date_timestamp = args->GetAsDate("end_date");
 
     std::string datetimeFormat = patterns[ui->comboBox_Pattern->currentText().toStdString()];
+
+    bool daily_folder = args->At("no_daily_folder") && args->At("no_daily_folder").Value() == "false";
     std::string daily_folder_pattern = args->At("daily_folder_pattern").Value();
 
     time_t last_file_datetime = 0;
+    int interval = args->At("interval") && args->At("interval").Value() != "" ? std::stoi(args->At("interval").Value().c_str()) : 0;
 
-
-    int interval = 0;
-
-    //grab our interval
-    if (args->At("interval") && args->At("interval").Value() != "")
-    {
-        interval = std::stoi(args->At("interval").Value().c_str());
-    }
+    auto list = clientHandle->ListObjects("ceeplayer", gcs::Prefix(InputDir.toStdString()));
 
     for (auto it = list.begin(); it != list.end(); ++it)
     {
@@ -154,7 +178,6 @@ void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
         file_date_only.tm_hour = 0;
         file_date_only.tm_min = 0;
         file_date_only.tm_sec = 0;
-        file_date_only.tm_isdst = 0;
 
         std::tm file_time_only = dt;
         file_time_only.tm_year = 0;
@@ -163,33 +186,25 @@ void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
         file_time_only.tm_mday = 0;
         file_time_only.tm_mon = 0;
 
-        time_t file_timestamp = std::mktime(&file_time_only);
+        //mktime errors on times only, doing it manually
+        time_t file_timestamp = (file_time_only.tm_hour * 3600) + (file_time_only.tm_min * 60) + file_time_only.tm_sec;
         time_t file_datestamp = std::mktime(&file_date_only);
 
+        //If the file date is earlier than the start date then continue.
+        if (file_datestamp < start_date_timestamp)
+            continue;
 
-        if (args->At("start_date") && args->At("start_date").Value() != "")
-        {
-            if (file_datestamp < start_date_timestamp)
-                continue;
-        }
+        //If the file date is later than the end date then continue. Ignore if end_date wasn't set.
+        if (end_date_timestamp != 0 && file_datestamp > end_date_timestamp)
+            break;
 
-        if (args->At("end_date") && args->At("end_date").Value() != "")
-        {
-            if (file_datestamp > end_date_timestamp)
-                continue;
-        }
+        //If the file time is earlier than the start time then continue.
+        if (file_timestamp < start_time_timestamp)
+            continue;
 
-        if (args->At("start_time") && args->At("start_time").Value() != "")
-        {
-            if (file_timestamp < start_time_timestamp)
-                continue;
-        }
-
-        if (args->At("end_time") && args->At("end_time").Value() != "")
-        {
-            if (file_timestamp > end_time_timestamp)
-                continue;
-        }
+        //If the file time is later than the end time then continue. Ignore if end_time wasn't set.
+        if (end_time_timestamp != 0 && file_timestamp > end_time_timestamp)
+            continue;
 
         if (interval > 0)
         {
@@ -202,7 +217,8 @@ void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
                                                                                     , QString::fromStdString(std::to_string(file_timestamp))
                                                                                     , QString::fromStdString(std::to_string(file_timestamp - last_file_datetime))
                                                                                     );
-                ui->textEdit_Log->insertPlainText(data);
+                ui->textEdit_Log->append(data + '\n');
+                ui->textEdit_Log->show();
                 continue;
             }
 
@@ -210,23 +226,34 @@ void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
         }
 
         QString output_path;
-        if (args->At("no_daily_folder") && args->At("no_daily_folder").Value() == "false")
+        if (daily_folder)
         {
             char buffer[80];
             strftime(buffer, 80, daily_folder_pattern.c_str(), &dt);
-            QString daily_folder = QString("%1/%2").arg(OutputDir, "");
+            output_path = QString("%1/%2").arg(OutputDir, buffer);
         }
         else
         {
-            output_path = QString("%1/%2").arg(OutputDir, filename);
+            output_path = OutputDir;
         }
 
+        if (!QDir(output_path).exists())
+        {
+            if (!QDir().mkdir(output_path))
+            {
+                AddToDisplayLog(QString("Output directory does not exist and failed to be created. Argument: %1").arg(output_path));
+                return;
+            }
 
-        if (!QDir(OutputDir).exists())
-            QDir().mkdir(OutputDir);
+            AddToDisplayLog(QString("Output directory created. Argument: %1").arg(output_path));
+        }
+
+        output_path += "/" + filename;
 
         google::cloud::Status status = clientHandle->DownloadToFile("ceeplayer", filepath.toStdString(), output_path.toStdString());
         if (!status.ok()) throw std::runtime_error(status.message());
+
+        AddToDisplayLog(QString("Copying: %1 to %2").arg(filepath, output_path));
     }
 }
 
@@ -284,6 +311,16 @@ void MainWindow::ConvertStringToTM(tm &timepoint, std::string data, std::string 
     ss >> std::get_time(&timepoint, pattern.c_str());
 }
 
+void MainWindow::AddToDisplayLog(QString val)
+{
+    ui->textEdit_Log->append(val);
+    LogFile::WriteToLog(val.toStdString());
+
+    static QTextCursor c = ui->textEdit_Log->textCursor();
+    c.movePosition(QTextCursor::End);
+    ui->textEdit_Log->setTextCursor(c);
+}
+
 
 void MainWindow::on_pushButton_LoadTable_clicked()
 {
@@ -325,18 +362,19 @@ void MainWindow::on_pushButton_LoadTable_clicked()
 
 void MainWindow::on_pushButton_Download_clicked()
 {
-    //confirm all needed values are set
-    for (auto it = args->begin(); it != args->end(); ++it)
-    {
-        if (it->second.required == true)
-        {
-            if (it->second.Value() == "")
-                return;
-        }
-    }
+    static GCSDownloadThread *workerThread;
 
-    ui->textEdit_Log->insertPlainText("Beginning download.");
-    AttemptGCSDownload(QString::fromStdString(args->At("input_directory").Value()),QString::fromStdString(args->At("output_directory").Value()));
+    if (!m_ActiveGCSDownloadThread)
+    {
+        workerThread = new GCSDownloadThread(this);
+        m_ActiveGCSDownloadThread = true;
+    }
+    else
+        return;
+
+    connect(workerThread, &GCSDownloadThread::resultReady, this, &MainWindow::HandleGCSDownload);
+    connect(workerThread, &GCSDownloadThread::finished, workerThread, &QObject::deleteLater);
+    workerThread->start();
 }
 
 void MainWindow::on_lineEdit_StartDate_textChanged(const QString &arg1)
@@ -378,3 +416,10 @@ void MainWindow::on_checkBox_DailyFolders_stateChanged(int arg1)
 {
     args->EditArg("no_daily_folder", arg1 == 0 ? "true" : "false");
 }
+
+void MainWindow::HandleGCSDownload()
+{
+    m_ActiveGCSDownloadThread = false;
+    AddToDisplayLog("Download process completed.");
+}
+

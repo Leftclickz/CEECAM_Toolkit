@@ -162,18 +162,36 @@ public:
         return args.end();
     }
 
-    time_t GetAsTime(std::string name, std::string format)
+    time_t GetAsDate(std::string name)
     {
         if (At(name))
         {
             if (At(name).Value() != "")
             {
-                std::string dateFormat(format);
+                std::string dateFormat("%y/%m/%d");
                 std::string contents = At(name).Value();
                 std::stringstream ss { contents };
                 std::tm dt;
                 ss >> std::get_time(&dt, dateFormat.c_str());
                 return std::mktime(&dt);
+            }
+        }
+
+        return time_t();
+    }
+
+    time_t GetAsTime(std::string name)
+    {
+        if (At(name))
+        {
+            if (At(name).Value() != "")
+            {
+                std::string dateFormat("%H:%M:%S");
+                std::string contents = At(name).Value();
+                std::stringstream ss { contents };
+                std::tm dt;
+                ss >> std::get_time(&dt, dateFormat.c_str());
+                return (dt.tm_hour * 3600) + (dt.tm_min * 60) + dt.tm_sec;
             }
         }
 

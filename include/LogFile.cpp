@@ -106,7 +106,7 @@ void LogFile::AddReturnCode(int val)
 
 }
 
-static bool _DirectoryExists(std::string FolderPath, bool CreateDirectoryIfDoesNotExist /* = true */)
+bool _DirectoryExists(std::string FolderPath, bool CreateDirectoryIfDoesNotExist /* = true */)
 {
 	namespace fs = std::filesystem;
 	std::string directoryName = FolderPath;
@@ -123,7 +123,7 @@ static bool _DirectoryExists(std::string FolderPath, bool CreateDirectoryIfDoesN
 		return true;
 }
 
-static void _FindAndReplaceAll(std::string& data, std::string toSearch, std::string replaceStr)
+void _FindAndReplaceAll(std::string& data, std::string toSearch, std::string replaceStr)
 {
 	// Get the first occurrence
 	size_t pos = data.find(toSearch);

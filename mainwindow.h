@@ -7,6 +7,7 @@
 namespace gcs = google::cloud::storage;
 
 #include <QMainWindow>
+#include <QProcess>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -24,6 +25,8 @@ public:
 
     void LoadPatterns();
     void ConvertStringToTM(std::tm& timepoint, std::string data, std::string pattern);
+
+    void AddToDisplayLog(QString val);
 
 private slots:
     void on_pushButton_LoadTable_clicked();
@@ -46,15 +49,20 @@ private slots:
 
     void on_checkBox_DailyFolders_stateChanged(int arg1);
 
+    void HandleGCSDownload();
+
+
 private:
     Ui::MainWindow *ui;
-    class ArgumentMap* args;
+    bool m_ActiveGCSDownloadThread = false;
 
 public:
-    bool gacSet = false;
-    google::cloud::StatusOr<gcs::Client> clientHandle;
+    bool gacSet = false, conSet = false, proxySet = false;
+    class ArgumentMap* args;
 
+    google::cloud::StatusOr<gcs::Client> clientHandle;
     std::map<std::string, std::string> patterns;
+    QProcess* proxyConnector;
 
 
 

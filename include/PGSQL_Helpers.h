@@ -3,8 +3,8 @@
 #include <vector>
 #include <map>
 
-//libpq
-#include <../submodules/libpqxx/include/pqxx/pqxx>
+//libpqxx
+#include <pqxx/pqxx>
 
 //Tables
 #ifndef DATABASE_WHITELIST
