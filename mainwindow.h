@@ -8,6 +8,7 @@ namespace gcs = google::cloud::storage;
 
 #include <QMainWindow>
 #include <QProcess>
+#include <QCloseEvent>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -21,12 +22,14 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    void AttemptGCSDownload(QString InputDir, QString OutputDir);
-
     void LoadPatterns();
     void ConvertStringToTM(std::tm& timepoint, std::string data, std::string pattern);
 
     void AddToDisplayLog(QString val);
+
+    QString GetPatternText();
+
+    void ShutdownProxy();
 
 private slots:
     void on_pushButton_LoadTable_clicked();
@@ -50,6 +53,10 @@ private slots:
     void on_checkBox_DailyFolders_stateChanged(int arg1);
 
     void HandleGCSDownload();
+
+    void HandleGCSUpdateText(QString text);
+
+    void closeEvent(QCloseEvent *event) override;
 
 
 private:

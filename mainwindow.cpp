@@ -119,142 +119,8 @@ MainWindow::MainWindow(QWidget *parent)
 MainWindow::~MainWindow()
 {
     delete ui;
-}
-
-void MainWindow::AttemptGCSDownload(QString InputDir, QString OutputDir)
-{
-    if (!gacSet) return;
-
-    //Ensure the base output dir exists and make it if possible.
-    if (!QDir(OutputDir).exists())
-    {
-        if (!QDir().mkdir(OutputDir))
-        {
-            AddToDisplayLog(QString("Output directory does not exist and failed to be created. Argument: %1").arg(OutputDir));
-            return;
-        }
-
-        AddToDisplayLog(QString("Output directory created. Argument: %1").arg(OutputDir));
-    }
-
-    time_t start_time_timestamp = args->GetAsTime("start_time");
-    time_t end_time_timestamp = args->GetAsTime("end_time");
-    time_t start_date_timestamp = args->GetAsDate("start_date");
-    time_t end_date_timestamp = args->GetAsDate("end_date");
-
-    std::string datetimeFormat = patterns[ui->comboBox_Pattern->currentText().toStdString()];
-
-    bool daily_folder = args->At("no_daily_folder") && args->At("no_daily_folder").Value() == "false";
-    std::string daily_folder_pattern = args->At("daily_folder_pattern").Value();
-
-    time_t last_file_datetime = 0;
-    int interval = args->At("interval") && args->At("interval").Value() != "" ? std::stoi(args->At("interval").Value().c_str()) : 0;
-
-    auto list = clientHandle->ListObjects("ceeplayer", gcs::Prefix(InputDir.toStdString()));
-
-    for (auto it = list.begin(); it != list.end(); ++it)
-    {
-        QString filepath = QString::fromStdString(it->value().name());
-        QString filename = QDir(filepath).dirName();
-
-        //If we're not dealing with an image it means it's a subdirectory.
-        if (strncmp(it->value().content_type().c_str(), "image/jpeg", 5) != 0)
-        {
-            if (args->At("recursive").Value() == "true")
-                AttemptGCSDownload(filepath, QString("%1/%2").arg(OutputDir, filename));
-        }
-
-        //If the pattern doesnt include the end filetype then only include the first 12 characters.
-        std::string filename_to_match = filename.toStdString();
-        if (datetimeFormat.find(".jpg") == std::string::npos)
-            filename_to_match = filename_to_match.substr(0, 12);
-
-        //Get a timestamp from the filename
-        std::tm dt = {};
-        ConvertStringToTM(dt, filename_to_match, datetimeFormat);
-        dt.tm_isdst = 0;
-
-        std::tm file_date_only = dt;
-        file_date_only.tm_hour = 0;
-        file_date_only.tm_min = 0;
-        file_date_only.tm_sec = 0;
-
-        std::tm file_time_only = dt;
-        file_time_only.tm_year = 0;
-        file_time_only.tm_yday = 0;
-        file_time_only.tm_wday = 0;
-        file_time_only.tm_mday = 0;
-        file_time_only.tm_mon = 0;
-
-        //mktime errors on times only, doing it manually
-        time_t file_timestamp = (file_time_only.tm_hour * 3600) + (file_time_only.tm_min * 60) + file_time_only.tm_sec;
-        time_t file_datestamp = std::mktime(&file_date_only);
-
-        //If the file date is earlier than the start date then continue.
-        if (file_datestamp < start_date_timestamp)
-            continue;
-
-        //If the file date is later than the end date then continue. Ignore if end_date wasn't set.
-        if (end_date_timestamp != 0 && file_datestamp > end_date_timestamp)
-            break;
-
-        //If the file time is earlier than the start time then continue.
-        if (file_timestamp < start_time_timestamp)
-            continue;
-
-        //If the file time is later than the end time then continue. Ignore if end_time wasn't set.
-        if (end_time_timestamp != 0 && file_timestamp > end_time_timestamp)
-            continue;
-
-        if (interval > 0)
-        {
-            int diff = file_timestamp - last_file_datetime;
-
-            if (diff < interval)
-            {
-                QString data = QString("skip:%1 last:%2 current:%3 seconds:%4").arg(filename
-                                                                                    , QString::fromStdString(std::to_string(last_file_datetime))
-                                                                                    , QString::fromStdString(std::to_string(file_timestamp))
-                                                                                    , QString::fromStdString(std::to_string(file_timestamp - last_file_datetime))
-                                                                                    );
-                ui->textEdit_Log->append(data + '\n');
-                ui->textEdit_Log->show();
-                continue;
-            }
-
-            last_file_datetime = file_timestamp;
-        }
-
-        QString output_path;
-        if (daily_folder)
-        {
-            char buffer[80];
-            strftime(buffer, 80, daily_folder_pattern.c_str(), &dt);
-            output_path = QString("%1/%2").arg(OutputDir, buffer);
-        }
-        else
-        {
-            output_path = OutputDir;
-        }
-
-        if (!QDir(output_path).exists())
-        {
-            if (!QDir().mkdir(output_path))
-            {
-                AddToDisplayLog(QString("Output directory does not exist and failed to be created. Argument: %1").arg(output_path));
-                return;
-            }
-
-            AddToDisplayLog(QString("Output directory created. Argument: %1").arg(output_path));
-        }
-
-        output_path += "/" + filename;
-
-        google::cloud::Status status = clientHandle->DownloadToFile("ceeplayer", filepath.toStdString(), output_path.toStdString());
-        if (!status.ok()) throw std::runtime_error(status.message());
-
-        AddToDisplayLog(QString("Copying: %1 to %2").arg(filepath, output_path));
-    }
+    delete args;
+    delete proxyConnector;
 }
 
 void MainWindow::LoadPatterns()
@@ -313,7 +179,7 @@ void MainWindow::ConvertStringToTM(tm &timepoint, std::string data, std::string 
 
 void MainWindow::AddToDisplayLog(QString val)
 {
-    ui->textEdit_Log->append(val);
+    ui->textEdit_Log->insertPlainText(QString(val + '\n'));
     LogFile::WriteToLog(val.toStdString());
 
     static QTextCursor c = ui->textEdit_Log->textCursor();
@@ -321,6 +187,46 @@ void MainWindow::AddToDisplayLog(QString val)
     ui->textEdit_Log->setTextCursor(c);
 }
 
+QString MainWindow::GetPatternText()
+{
+    return ui->comboBox_Pattern->currentText();
+}
+
+void MainWindow::ShutdownProxy()
+{
+    //Need the find the exe name
+    QStringList filters;
+    filters << "*.exe";
+
+    //This is our proxy folder
+    QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data/proxy"));
+    assetsFolder.setNameFilters(filters);
+    assetsFolder.setFilter(QDir::Files);
+
+    QFileInfoList files = assetsFolder.entryInfoList();
+
+    bool found = false;
+
+    QStringList args("/im");
+
+    //This should only ever run once but just in case.
+    foreach (QFileInfo file, files)
+    {
+        args.push_back(file.fileName());
+        found = true;
+        break;
+    }
+
+    //Assuming we found our exe we're going to taskkill it.
+    if (found)
+    {
+        args.push_back("/f");
+
+        QProcess p;
+        p.start("taskkill", args);
+        p.waitForFinished();
+    }
+}
 
 void MainWindow::on_pushButton_LoadTable_clicked()
 {
@@ -372,8 +278,12 @@ void MainWindow::on_pushButton_Download_clicked()
     else
         return;
 
-    connect(workerThread, &GCSDownloadThread::resultReady, this, &MainWindow::HandleGCSDownload);
+    AddToDisplayLog(QString("Download process begin. Input directory: %1")
+                    .arg(QString::fromStdString(args->At("input_directory").Value())));
+
     connect(workerThread, &GCSDownloadThread::finished, workerThread, &QObject::deleteLater);
+    connect(workerThread, &GCSDownloadThread::resultReady, this, &MainWindow::HandleGCSDownload);
+    connect(workerThread, &GCSDownloadThread::UpdateText, this, &MainWindow::HandleGCSUpdateText);
     workerThread->start();
 }
 
@@ -421,5 +331,25 @@ void MainWindow::HandleGCSDownload()
 {
     m_ActiveGCSDownloadThread = false;
     AddToDisplayLog("Download process completed.");
+}
+
+void MainWindow::HandleGCSUpdateText(QString text)
+{
+    AddToDisplayLog(text);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (proxySet)
+    {
+        proxyConnector->kill();
+        ShutdownProxy();
+    }
+    if (conSet)
+    {
+        PGSQL::DisconnectAll();
+    }
+
+    event->accept();
 }
 
