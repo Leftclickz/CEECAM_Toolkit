@@ -1,5 +1,6 @@
-#include "mainwindow.h"
-#include "ui_mainwindow.h"
+#include "dialog_downloadtool.h"
+#include "ui_dialog_downloadtool.h"
+
 #include "argumentmap.h"
 #include "gcsdownloadthread.h"
 
@@ -18,17 +19,17 @@
 #include <time.h>
 #include <locale.h>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
+Dialog_DownloadTool::Dialog_DownloadTool(QWidget *parent) :
+    QDialog(parent),
+    ui(new Ui::dialog_downloadtool)
 {
     ui->setupUi(this);
 
-    setWindowTitle("CEECAM Toolkit");
+    setWindowTitle("CEECAM Toolkit - Download Dialog");
 
     //Create our argument map and parse our argument file
     args = new ArgumentMap();
-    args->AddDefaultArguments();
+    args->AddDefaults("default_download_args.txt");
 
     //Load patterns for download use.
     LoadPatterns();
@@ -115,15 +116,58 @@ MainWindow::MainWindow(QWidget *parent)
     }
 }
 
-
-MainWindow::~MainWindow()
+Dialog_DownloadTool::~Dialog_DownloadTool()
 {
     delete ui;
     delete args;
     delete proxyConnector;
 }
 
-void MainWindow::LoadPatterns()
+void Dialog_DownloadTool::ConvertStringToTM(tm &timepoint, std::string data, std::string pattern)
+{
+    std::string copy = data;
+    std::stringstream ss;
+
+    //format std::string to be convertible into a time point
+    {
+        //delimit by colons
+        ss << copy[0] << copy[1];
+        for (size_t i = 2; i < copy.size(); i += 2)
+            ss << ':' << copy[i] << copy[i + 1];
+    }
+
+    ss >> std::get_time(&timepoint, pattern.c_str());
+}
+
+void Dialog_DownloadTool::AddToDisplayLog(QString val)
+{
+    ui->textEdit_Log->insertPlainText(QString(val + '\n'));
+    LogFile::WriteToLog(val.toStdString());
+
+    static QTextCursor c = ui->textEdit_Log->textCursor();
+    c.movePosition(QTextCursor::End);
+    ui->textEdit_Log->setTextCursor(c);
+}
+
+void Dialog_DownloadTool::DisconnectAll()
+{
+    if (proxySet)
+    {
+        proxyConnector->kill();
+        ShutdownProxy();
+    }
+    if (conSet)
+    {
+        PGSQL::DisconnectAll();
+    }
+}
+
+QString Dialog_DownloadTool::GetPatternText()
+{
+    return ui->comboBox_Pattern->currentText();
+}
+
+void Dialog_DownloadTool::LoadPatterns()
 {
     //We only want a specific file so we'll filter out all other results.
     QStringList filters;
@@ -161,38 +205,7 @@ void MainWindow::LoadPatterns()
     }
 }
 
-void MainWindow::ConvertStringToTM(tm &timepoint, std::string data, std::string pattern)
-{
-    std::string copy = data;
-    std::stringstream ss;
-
-    //format std::string to be convertible into a time point
-    {
-        //delimit by colons
-        ss << copy[0] << copy[1];
-        for (size_t i = 2; i < copy.size(); i += 2)
-            ss << ':' << copy[i] << copy[i + 1];
-    }
-
-    ss >> std::get_time(&timepoint, pattern.c_str());
-}
-
-void MainWindow::AddToDisplayLog(QString val)
-{
-    ui->textEdit_Log->insertPlainText(QString(val + '\n'));
-    LogFile::WriteToLog(val.toStdString());
-
-    static QTextCursor c = ui->textEdit_Log->textCursor();
-    c.movePosition(QTextCursor::End);
-    ui->textEdit_Log->setTextCursor(c);
-}
-
-QString MainWindow::GetPatternText()
-{
-    return ui->comboBox_Pattern->currentText();
-}
-
-void MainWindow::ShutdownProxy()
+void Dialog_DownloadTool::ShutdownProxy()
 {
     //Need the find the exe name
     QStringList filters;
@@ -228,7 +241,7 @@ void MainWindow::ShutdownProxy()
     }
 }
 
-void MainWindow::on_pushButton_LoadTable_clicked()
+void Dialog_DownloadTool::on_pushButton_LoadTable_clicked()
 {
     static bool initialized = false;
 
@@ -265,8 +278,7 @@ void MainWindow::on_pushButton_LoadTable_clicked()
     }
 }
 
-
-void MainWindow::on_pushButton_Download_clicked()
+void Dialog_DownloadTool::on_pushButton_Download_clicked()
 {
     static GCSDownloadThread *workerThread;
 
@@ -282,74 +294,64 @@ void MainWindow::on_pushButton_Download_clicked()
                     .arg(QString::fromStdString(args->At("input_directory").Value())));
 
     connect(workerThread, &GCSDownloadThread::finished, workerThread, &QObject::deleteLater);
-    connect(workerThread, &GCSDownloadThread::resultReady, this, &MainWindow::HandleGCSDownload);
-    connect(workerThread, &GCSDownloadThread::UpdateText, this, &MainWindow::HandleGCSUpdateText);
+    connect(workerThread, &GCSDownloadThread::resultReady, this, &Dialog_DownloadTool::HandleGCSDownload);
+    connect(workerThread, &GCSDownloadThread::UpdateText, this, &Dialog_DownloadTool::HandleGCSUpdateText);
     workerThread->start();
 }
 
-void MainWindow::on_lineEdit_StartDate_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_StartDate_textChanged(const QString &arg1)
 {
     args->EditArg("start_date", arg1.toStdString());
 }
 
-void MainWindow::on_lineEdit_EndDate_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_EndDate_textChanged(const QString &arg1)
 {
     args->EditArg("end_date", arg1.toStdString());
 }
 
-void MainWindow::on_lineEdit_InputDir_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_InputDir_textChanged(const QString &arg1)
 {
     args->EditArg("input_directory", "images/" + arg1.toStdString());
 }
 
-void MainWindow::on_lineEdit_OutputDir_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_OutputDir_textChanged(const QString &arg1)
 {
     args->EditArg("output_directory", arg1.toStdString());
 }
 
-void MainWindow::on_lineEdit_StartTime_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_StartTime_textChanged(const QString &arg1)
 {
     args->EditArg("start_time", arg1.toStdString());
 }
 
-void MainWindow::on_lineEdit_EndTime_textChanged(const QString &arg1)
+void Dialog_DownloadTool::on_lineEdit_EndTime_textChanged(const QString &arg1)
 {
     args->EditArg("end_time", arg1.toStdString());
 }
 
-void MainWindow::on_checkBox_Recursive_stateChanged(int arg1)
+void Dialog_DownloadTool::on_checkBox_Recursive_stateChanged(int arg1)
 {
     args->EditArg("recursive", arg1 == 0 ? "false" : "true");
 }
 
-void MainWindow::on_checkBox_DailyFolders_stateChanged(int arg1)
+void Dialog_DownloadTool::on_checkBox_DailyFolders_stateChanged(int arg1)
 {
     args->EditArg("no_daily_folder", arg1 == 0 ? "true" : "false");
 }
 
-void MainWindow::HandleGCSDownload()
+void Dialog_DownloadTool::HandleGCSDownload()
 {
     m_ActiveGCSDownloadThread = false;
     AddToDisplayLog("Download process completed.");
 }
 
-void MainWindow::HandleGCSUpdateText(QString text)
+void Dialog_DownloadTool::HandleGCSUpdateText(QString text)
 {
     AddToDisplayLog(text);
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
+void Dialog_DownloadTool::closeEvent(QCloseEvent *event)
 {
-    if (proxySet)
-    {
-        proxyConnector->kill();
-        ShutdownProxy();
-    }
-    if (conSet)
-    {
-        PGSQL::DisconnectAll();
-    }
-
+    hide();
     event->accept();
 }
-

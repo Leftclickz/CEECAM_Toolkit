@@ -3,9 +3,9 @@
 
 #include <QThread>
 
-#include "mainwindow.h"
+#include "dialog_downloadtool.h"
 #include "argumentmap.h"
-#include "LogFile.h"
+#include "aetl.h"
 
 class GCSDownloadThread : public QThread
 {
@@ -219,11 +219,11 @@ signals:
     void UpdateText(QString text);
 
 public:
-    GCSDownloadThread(class MainWindow* owner) : m_Owner(owner){}
+    GCSDownloadThread(class Dialog_DownloadTool* owner) : m_Owner(owner){}
 
 private:
 
-    MainWindow* m_Owner = nullptr;
+    Dialog_DownloadTool* m_Owner = nullptr;
 };
 
 #endif // GCSDOWNLOADTHREAD_H

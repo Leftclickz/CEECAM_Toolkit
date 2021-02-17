@@ -1,35 +1,35 @@
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef DIALOG_DOWNLOADTOOL_H
+#define DIALOG_DOWNLOADTOOL_H
+
+#include <QDialog>
+#include <QProcess>
+#include <QCloseEvent>
+
+namespace Ui {
+class dialog_downloadtool;
+}
 
 #define CC_TK_VERSION "f50bd3f173113836cdcdf2486501e3a8905989eb"
 
 #include "google/cloud/storage/client.h"
 namespace gcs = google::cloud::storage;
 
-#include <QMainWindow>
-#include <QProcess>
-#include <QCloseEvent>
-
-QT_BEGIN_NAMESPACE
-namespace Ui { class MainWindow; }
-QT_END_NAMESPACE
-
-class MainWindow : public QMainWindow
+class Dialog_DownloadTool : public QDialog
 {
     Q_OBJECT
 
 public:
-    MainWindow(QWidget *parent = nullptr);
-    ~MainWindow();
+    explicit Dialog_DownloadTool(QWidget *parent = nullptr);
+    ~Dialog_DownloadTool();
 
     void LoadPatterns();
+    void ShutdownProxy();
     void ConvertStringToTM(std::tm& timepoint, std::string data, std::string pattern);
-
     void AddToDisplayLog(QString val);
 
-    QString GetPatternText();
+    void DisconnectAll();
 
-    void ShutdownProxy();
+    QString GetPatternText();
 
 private slots:
     void on_pushButton_LoadTable_clicked();
@@ -58,9 +58,8 @@ private slots:
 
     void closeEvent(QCloseEvent *event) override;
 
-
 private:
-    Ui::MainWindow *ui;
+    Ui::dialog_downloadtool *ui;
     bool m_ActiveGCSDownloadThread = false;
 
 public:
@@ -70,8 +69,6 @@ public:
     google::cloud::StatusOr<gcs::Client> clientHandle;
     std::map<std::string, std::string> patterns;
     QProcess* proxyConnector;
-
-
-
 };
-#endif // MAINWINDOW_H
+
+#endif // DIALOG_DOWNLOADTOOL_H

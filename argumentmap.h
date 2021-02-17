@@ -79,11 +79,11 @@ public:
         args[name].val = val;
     }
 
-    inline void AddDefaultArguments()
+    inline void AddDefaults(QString filter)
     {
         //We only want a specific file so we'll filter out all other results.
         QStringList filters;
-        filters << "default_args.txt";
+        filters << filter;
 
         //This is our data folder relative to the exe.
         QDir assetsFolder = QDir(QCoreApplication::applicationDirPath().append("/data"));

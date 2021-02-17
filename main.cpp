@@ -1,4 +1,4 @@
-#include "mainwindow.h"
+#include "mainmenugreeting.h"
 
 #include <aetl.h>
 
@@ -14,7 +14,7 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("CEECAM Toolkit");
     QCoreApplication::setApplicationVersion("test");
 
-    MainWindow w;
+    MainMenuGreeting w;
     w.show();
     return a.exec();
 }

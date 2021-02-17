@@ -14,23 +14,30 @@ LIBS += -lws2_32
 RC_ICONS = favicon.ico
 
 SOURCES += \
+    dialog_downloadtool.cpp \
+    dialog_uploadtool.cpp \
     include/DatabaseConnection.cpp \
     include/LogFile.cpp \
     include/PGSQL_Helpers.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainmenugreeting.cpp
 
 HEADERS += \
     argumentmap.h \
+    curluploadthread.h \
+    dialog_downloadtool.h \
+    dialog_uploadtool.h \
     gcsdownloadthread.h \
     include/DatabaseConnection.h \
     include/LogFile.h \
     include/PGSQL_Helpers.h \
     include/aetl.h \
-    mainwindow.h
+    mainmenugreeting.h
 
 FORMS += \
-    mainwindow.ui
+    dialog_downloadtool.ui \
+    dialog_uploadtool.ui \
+    mainmenugreeting.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin
