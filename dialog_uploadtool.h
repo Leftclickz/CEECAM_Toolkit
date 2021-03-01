@@ -35,6 +35,12 @@ private slots:
     void HandleTestComplete();
     void UpdateDisplayText(QString val);
 
+    void on_pushButton_Upload_clicked();
+
+    void on_lineEdit_Password_textEdited(const QString &arg1);
+
+    void on_lineEdit_Username_textEdited(const QString &arg1);
+
 public:
     class ArgumentMap* args;
 
