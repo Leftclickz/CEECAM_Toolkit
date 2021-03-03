@@ -1,7 +1,6 @@
 #ifndef CURLUPLOADTHREAD_H
 #define CURLUPLOADTHREAD_H
 
-
 //jpg defs
 #define JPG_BOF_HEADER std::string("FFD8")
 #define JPG_EOF_HEADER std::string("FFD9")
@@ -10,10 +9,15 @@
 #include <QDir>
 #include <QDirIterator>
 #include <fstream>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <QTextCodec>
 
 #include "dialog_uploadtool.h"
 #include "argumentmap.h"
 #include "aetl.h"
+
+#include <curl/curl.h>
 
 class CurlUploadThread : public QThread
 {
@@ -37,8 +41,13 @@ class CurlUploadThread : public QThread
             }
         }
 
+       //Collect file data
        CollectAllFilesForUpload();
        FilterFiles();
+
+       //Only upload on real runs
+       if (!m_IsTestRun)
+           BeginUploadOfFiles();
 
        emit resultReady(this);
     }
@@ -68,7 +77,6 @@ class CurlUploadThread : public QThread
 
         return ret.str();
     }
-
 
     //Simply collect all jpg/JPG files that exist in the source directory, we'll filter them later.
     void CollectAllFilesForUpload()
@@ -222,6 +230,162 @@ class CurlUploadThread : public QThread
         emit UpdateText(QString("%1 files passed pattern filtration.").arg(m_FilesToUpload.length()));
     }
 
+    static size_t writeFunc(void *ptr, size_t size, size_t nmemb, std::string* data)
+    {
+        data->append((char*) ptr, size * nmemb);
+        return size * nmemb;
+    }
+
+    void BeginUploadOfFiles()
+    {
+        //Hold Map pointer closer
+        ArgumentMap* args = m_Owner->args;
+
+        //Set codex to utf-8 until execution finishes here
+        QTextCodec::setCodecForLocale(QTextCodec::codecForName("UTF-8"));
+
+        auto curl = curl_easy_init();
+
+        if (curl)
+        {
+            //Append content-type header
+            struct curl_slist *hs=NULL;
+            hs = curl_slist_append(hs, "Content-Type: application/json;charset=UTF-8");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
+
+            //Set destination url to the auth server
+            curl_easy_setopt(curl, CURLOPT_URL, args->At("auth_server").Value().c_str());
+
+            //Set post fields
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            QString postData = QString("{\"username\":\"%1\",\"password\":\"%2\"}").arg(
+                        QString::fromStdString(args->At("username").Value()),
+                        QString::fromStdString(args->At("password").Value())
+                        );
+            std::string rawData = postData.toStdString();
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, rawData.c_str());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, postData.length());
+
+            //Setup callbacks
+            std::string response_string, header_string;
+            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeFunc);
+            curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_string);
+
+            //Perform transaction
+            auto res = curl_easy_perform(curl);
+
+            //Get response info
+            char* url;
+            long response_code;
+            double elapsed;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+            curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &elapsed);
+            curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+
+            //free the slist
+            curl_slist_free_all(hs);
+
+            //reset curl for later
+            curl_easy_reset(curl);
+
+            if (res != CURLE_OK)
+            {
+                //post relevant failure info to the message log
+                emit UpdateText(QString::fromStdString(header_string));
+                emit UpdateText(QString::fromStdString(response_string));
+            }
+            else
+            {
+                //Collect the token from the response
+                QJsonDocument doc = QJsonDocument::fromJson(QString::fromStdString(response_string).toUtf8());
+                QString tokenID = "";
+                if (!doc.isNull())
+                {
+                    if (doc.isObject())
+                    {
+                        tokenID = doc.object()["token"].toString();
+                    }
+                    else
+                    {
+                        emit UpdateText("Something unexpected happened.");
+                        curl_easy_cleanup(curl);
+                        QTextCodec::setCodecForLocale(nullptr);
+                        return;
+                    }
+                }
+                else
+                {
+                    emit UpdateText("Something unexpected happened.");
+                    curl_easy_cleanup(curl);
+                    QTextCodec::setCodecForLocale(nullptr);
+                    return;
+                }
+
+                //Display token used for this session
+                emit UpdateText(QString("Token acquired from auth_server: %1").arg(tokenID));
+
+                //Set destination url to the server endpoint
+                curl_easy_setopt(curl, CURLOPT_URL, args->At("end_server").Value().c_str());
+
+                //Allow redirecting up to 50 times. Also override default response to POST on 301 messages.
+                curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+                curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50L);
+                curl_easy_setopt(curl, CURLOPT_POSTREDIR, CURLOPT_POST301);
+
+                //Set form for POST
+                auto form = curl_mime_init(curl);
+                curl_easy_setopt(curl, CURLOPT_POST, 1L);
+
+                //Add the file
+                auto field = curl_mime_addpart(form);
+                curl_mime_name(field, "file");
+                curl_mime_filedata(field, "D:/Work/test_two/test_image.jpg");
+
+                //Add the token in the header
+                QString tokenHeader = QString("Authorization: Token %1").arg(tokenID);
+                std::string tokenHeaderCString = tokenHeader.toStdString();
+                const char* tokenHeaderBytes = tokenHeaderCString.c_str();
+                emit UpdateText(tokenHeaderBytes);
+                curl_slist *hs=NULL;
+                hs = curl_slist_append(hs, tokenHeaderBytes);
+                curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hs);
+
+                //Add the form
+                curl_easy_setopt(curl, CURLOPT_MIMEPOST, form);
+
+                //Setup callbacks
+                std::string response_string, header_string;
+                curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
+                curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeFunc);
+                curl_easy_setopt(curl, CURLOPT_HEADERDATA, &header_string);
+
+                //Perform transaction
+                curl_easy_perform(curl);
+
+                //Get response info
+                char* url;
+                long response_code;
+                double elapsed;
+                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+                curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, &elapsed);
+                curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+
+                //post relevant info to the message log
+                emit UpdateText(QString::fromStdString(header_string));
+                emit UpdateText(QString::fromStdString(response_string));
+
+                //free curl objects
+                curl_slist_free_all(hs);
+                curl_mime_free(form);
+            }
+
+            //cleanup
+            curl_easy_cleanup(curl);
+        }
+
+        QTextCodec::setCodecForLocale(nullptr);
+    }
 
 signals:
     void resultReady(CurlUploadThread* self);

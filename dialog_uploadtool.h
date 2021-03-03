@@ -34,6 +34,8 @@ private slots:
     void HandleUploadComplete();
     void HandleTestComplete();
     void UpdateDisplayText(QString val);
+    bool PassedDirectoryChecks();
+    bool PassedServerChecks();
 
     void on_pushButton_Upload_clicked();
 
@@ -46,7 +48,9 @@ public:
 
 private:
     Ui::Dialog_UploadTool *ui;
+
     bool m_ActiveUploadThread = false;
+    static class CurlUploadThread *m_WorkerThread;
 
 };
 
